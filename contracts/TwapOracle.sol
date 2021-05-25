@@ -1,27 +1,16 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
+import "hardhat/console.sol";
 
-import "./libraries/IUniswapV2Pair.sol";
-import "./libraries/FixedPoint.sol";
-import "./libraries/UniswapV2Library.sol";
-import "./libraries/UniswapV2OracleLibrary.sol";
-import "./libraries/SafeMath.sol";
+import {IUniswapV2Pair} from "./libraries/IUniswapV2Pair.sol";
+import {UniswapV2Library} from "./libraries/UniswapV2Library.sol";
+import {UniswapV2OracleLibrary} from "./libraries/UniswapV2OracleLibrary.sol";
+import {FixedPoint} from "./libraries/FixedPoint.sol";
+import {SafeMath} from "./libraries/SafeMath.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract TwapOracle {
+contract TwapOracle is Ownable {
     using FixedPoint for *;
-
-    address public immutable factory;
-    uint256 public immutable period;
-
-    event LogTaskSubmitted(
-        uint256 indexed id,
-        uint256 startOracleTime,
-        bool isSubmitAndExec
-    );
-
-    event LogOracles(uint256 indexed _id, Oracle[] oracles);
-
-    mapping(uint256 => Oracle[]) public oraclesFromId;
 
     struct Oracle {
         IUniswapV2Pair pair;
@@ -32,9 +21,32 @@ contract TwapOracle {
         uint32 blockTimestampLast;
     }
 
-    constructor(address _factory, uint256 _period) {
+    address public immutable factory;
+    bytes32 immutable initHash;
+    uint32 private period;
+    uint32 private maxPeriod;
+
+    mapping(uint256 => Oracle[]) public oraclesFromId;
+    mapping(uint256 => address[]) public pathFromId;
+
+    event LogTaskSubmitted(
+        uint256 indexed id,
+        uint256 startOracleTime,
+        bool isSubmitAndExec
+    );
+
+    event LogOracles(uint256 indexed _id, Oracle[] oracles);
+
+    constructor(
+        address _factory,
+        uint32 _period,
+        uint32 _maxPeriod,
+        bytes32 _initHash
+    ) {
         factory = _factory;
         period = _period;
+        maxPeriod = _maxPeriod;
+        initHash = _initHash;
     }
 
     // to be plugged into GelatoDCA.sol
@@ -54,18 +66,27 @@ contract TwapOracle {
         startOracles(_id, _tradePath);
     }
 
-    function getPrice(
-        uint256 _id,
-        address[] calldata tradePath,
-        uint256 amountIn
-    ) external view returns (uint256 price) {
+    function getPrice(uint256 _id, uint256 amountIn)
+        external
+        view
+        returns (uint256 price)
+    {
+        address[] memory storedPath = pathFromId[_id];
         Oracle[] memory _oracles = oraclesFromId[_id];
 
-        price = updateAndGetPrice(_oracles[0], tradePath[0], amountIn);
+        price = updateAndGetPrice(_oracles[0], storedPath[0], amountIn);
 
         for (uint256 x = 1; x < _oracles.length; x++) {
-            price = updateAndGetPrice(_oracles[x], tradePath[x], price);
+            price = updateAndGetPrice(_oracles[x], storedPath[x], price);
         }
+    }
+
+    function setPeriod(uint32 _period) external onlyOwner {
+        period = _period;
+    }
+
+    function setMaxPeriod(uint32 _maxPeriod) external onlyOwner {
+        maxPeriod = _maxPeriod;
     }
 
     function startOracles(uint256 _id, address[] calldata tradePath) internal {
@@ -86,6 +107,7 @@ contract TwapOracle {
                     .blockTimestampLast;
             }
         }
+        pathFromId[_id] = tradePath;
 
         emit LogOracles(_id, oraclesFromId[_id]);
     }
@@ -96,7 +118,9 @@ contract TwapOracle {
         returns (Oracle memory newOracle)
     {
         IUniswapV2Pair pair =
-            IUniswapV2Pair(UniswapV2Library.pairFor(factory, token0, token1));
+            IUniswapV2Pair(
+                UniswapV2Library.pairFor(factory, token0, token1, initHash)
+            );
         token0 = pair.token0();
         token1 = pair.token1();
 
@@ -139,9 +163,10 @@ contract TwapOracle {
             );
 
         uint32 timeElapsed = blockTimestamp - _oracle.blockTimestampLast;
+
         require(
-            timeElapsed >= period,
-            "TwapOracle: updateAndGetPrice: Time not elapsed"
+            isUpToDate(timeElapsed),
+            "TwapOracle: updateAndGetPrice: TimeElapsed out of range."
         );
 
         return
@@ -186,5 +211,9 @@ contract TwapOracle {
             require(token == token1, "ExampleOracleSimple: INVALID_TOKEN");
             amountOut = price1Average.mul(amountIn).decode144();
         }
+    }
+
+    function isUpToDate(uint32 timeElapsed) internal view returns (bool) {
+        return (timeElapsed >= period && timeElapsed <= maxPeriod);
     }
 }

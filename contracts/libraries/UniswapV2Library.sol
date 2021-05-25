@@ -24,7 +24,8 @@ library UniswapV2Library {
     function pairFor(
         address factory,
         address tokenA,
-        address tokenB
+        address tokenB,
+        bytes32 initHash
     ) internal pure returns (address pair) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         pair = address(
@@ -35,7 +36,8 @@ library UniswapV2Library {
                             hex"ff",
                             factory,
                             keccak256(abi.encodePacked(token0, token1)),
-                            hex"96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f" // init code hash
+                            initHash
+                            // hex"96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f" // init code hash
                         )
                     )
                 )
@@ -47,11 +49,13 @@ library UniswapV2Library {
     function getReserves(
         address factory,
         address tokenA,
-        address tokenB
+        address tokenB,
+        bytes32 initHash
     ) internal view returns (uint256 reserveA, uint256 reserveB) {
         (address token0, ) = sortTokens(tokenA, tokenB);
         (uint256 reserve0, uint256 reserve1, ) =
-            IUniswapV2Pair(pairFor(factory, tokenA, tokenB)).getReserves();
+            IUniswapV2Pair(pairFor(factory, tokenA, tokenB, initHash))
+                .getReserves();
         (reserveA, reserveB) = tokenA == token0
             ? (reserve0, reserve1)
             : (reserve1, reserve0);
@@ -108,14 +112,15 @@ library UniswapV2Library {
     function getAmountsOut(
         address factory,
         uint256 amountIn,
-        address[] memory path
+        address[] memory path,
+        bytes32 initHash
     ) internal view returns (uint256[] memory amounts) {
         require(path.length >= 2, "UniswapV2Library: INVALID_PATH");
         amounts = new uint256[](path.length);
         amounts[0] = amountIn;
         for (uint256 i; i < path.length - 1; i++) {
             (uint256 reserveIn, uint256 reserveOut) =
-                getReserves(factory, path[i], path[i + 1]);
+                getReserves(factory, path[i], path[i + 1], initHash);
             amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
         }
     }
@@ -124,14 +129,15 @@ library UniswapV2Library {
     function getAmountsIn(
         address factory,
         uint256 amountOut,
-        address[] memory path
+        address[] memory path,
+        bytes32 initHash
     ) internal view returns (uint256[] memory amounts) {
         require(path.length >= 2, "UniswapV2Library: INVALID_PATH");
         amounts = new uint256[](path.length);
         amounts[amounts.length - 1] = amountOut;
         for (uint256 i = path.length - 1; i > 0; i--) {
             (uint256 reserveIn, uint256 reserveOut) =
-                getReserves(factory, path[i - 1], path[i]);
+                getReserves(factory, path[i - 1], path[i], initHash);
             amounts[i - 1] = getAmountIn(amounts[i], reserveIn, reserveOut);
         }
     }

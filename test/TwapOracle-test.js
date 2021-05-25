@@ -4,7 +4,6 @@ const { INIT_CODE_HASH } = require('@uniswap/sdk');
 const { pack, keccak256 } = require('@ethersproject/solidity');
 const { getCreate2Address } = require('@ethersproject/address');
 
-
 const FACTORY = network.config.FACTORY;
 const WETH = network.config.WETH;
 const DAI = network.config.DAI;
@@ -15,6 +14,8 @@ const PATH_daiWeth = [DAI, WETH];
 const PATH_uniLink = [UNI, WETH, LINK];
 
 const period = 5 * 60 // 5 min
+const maxPeriod = 10 * 60 // 10 min
+const initHash = "96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f";
 
 const sleep = (milliseconds) => {
     return new Promise(resolve => setTimeout(resolve, milliseconds))
@@ -63,7 +64,7 @@ describe("TwapOracle", function() {
       deployerAddress = await deployer.getAddress();
 
       const _twapOracle = await ethers.getContractFactory("TwapOracle");
-      twapOracle = await _twapOracle.deploy(FACTORY, period);
+      twapOracle = await _twapOracle.deploy(FACTORY, period, maxPeriod, INIT_CODE_HASH);
       await mineBlocks(1);
       
       daiWethAddress = getCreate2Address(
@@ -150,7 +151,7 @@ describe("TwapOracle", function() {
       await daiWeth.sync();
 
       await mineBlocks(1);
-      const price = await twapOracle.getPrice(1, PATH_daiWeth, ethers.utils.parseEther("1"));
+      const price = await twapOracle.getPrice(1, ethers.utils.parseEther("1"));
       timeStamp2 = (await ethers.provider.getBlock()).timestamp;
       price0Cumulative_2 = await daiWeth.price0CumulativeLast();
       price1Cumulative_2 = await daiWeth.price1CumulativeLast();
@@ -194,7 +195,7 @@ describe("TwapOracle", function() {
       await linkWeth.sync();
       await mineBlocks(1);
 
-      const price = await twapOracle.getPrice(2, PATH_uniLink, ethers.utils.parseEther("1"));
+      const price = await twapOracle.getPrice(2, ethers.utils.parseEther("1"));
       timeStamp2 = (await ethers.provider.getBlock()).timestamp;
       uni_price0Cumulative_2 = await uniWeth.price0CumulativeLast();
       link_price0Cumulative_2 = await linkWeth.price0CumulativeLast();
@@ -208,6 +209,13 @@ describe("TwapOracle", function() {
 
       expect(parseFloat(ethers.utils.formatEther(price)).toFixed(7)).to.eql(parseFloat(expectedPrice).toFixed(7));
 
+    })
+
+    it("Revert if time elapsed is over max period", async function(){
+      await twapOracle.setMaxPeriod(0);
+      await mineBlocks(1);
+      await expect(twapOracle.getPrice(1, ethers.utils.parseEther("1")))
+      .to.be.revertedWith("TwapOracle: updateAndGetPrice: TimeElapsed out of range.");
     })
 
    
