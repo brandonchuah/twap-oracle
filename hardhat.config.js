@@ -17,6 +17,7 @@ const addresses_mainnet = {
   DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
   Gelato: "0x3CACa7b48D0573D793d3b0279b5F0029180E83b6",
   GelatoGasPriceOracle: "0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C",
+  OracleAggregator: "0x64f31d46c52bbde223d863b11dab9327ab1414e9"
 }
 
 const addresses_polygon = {
@@ -55,6 +56,7 @@ module.exports = {
         auto: false
       },
       ...addresses_mainnet,
+      ALCHEMY_MAINNET
       // ...addresses_polygon,
     },
     ropsten: {

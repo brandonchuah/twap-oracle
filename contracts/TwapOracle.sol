@@ -1,6 +1,5 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
-import "hardhat/console.sol";
 
 import {IUniswapV2Pair} from "./libraries/IUniswapV2Pair.sol";
 import {UniswapV2Library} from "./libraries/UniswapV2Library.sol";
@@ -22,9 +21,9 @@ contract TwapOracle is Ownable {
     }
 
     address public immutable factory;
-    bytes32 immutable initHash;
-    uint32 private period;
-    uint32 private maxPeriod;
+    bytes32 public immutable initHash;
+    uint32 public period;
+    uint32 public maxPeriod;
 
     mapping(uint256 => Oracle[]) public oraclesFromId;
     mapping(uint256 => address[]) public pathFromId;
@@ -49,25 +48,12 @@ contract TwapOracle is Ownable {
         initHash = _initHash;
     }
 
-    // to be plugged into GelatoDCA.sol
-    // _updateAndSubmitNextTask()
-    // submit()
-    function getStartOracleTask(
-        uint256 _id,
-        uint256 delay,
-        uint256 lastExecutionTime
-    ) external {
-        uint256 startOracleTime = lastExecutionTime + delay - period;
-
-        emit LogTaskSubmitted(_id, startOracleTime, false);
-    }
-
     function exec(uint256 _id, address[] calldata _tradePath) external {
         startOracles(_id, _tradePath);
     }
 
     function getPrice(uint256 _id, uint256 amountIn)
-        external
+        public
         view
         returns (uint256 price)
     {
@@ -87,6 +73,19 @@ contract TwapOracle is Ownable {
 
     function setMaxPeriod(uint32 _maxPeriod) external onlyOwner {
         maxPeriod = _maxPeriod;
+    }
+
+    // to be plugged into GelatoDCA.sol
+    // _updateAndSubmitNextTask()
+    // submit()
+    function getStartOracleTask(
+        uint256 _id,
+        uint256 delay,
+        uint256 lastExecutionTime
+    ) public {
+        uint256 startOracleTime = lastExecutionTime + delay - period;
+
+        emit LogTaskSubmitted(_id, startOracleTime, false);
     }
 
     function startOracles(uint256 _id, address[] calldata tradePath) internal {
@@ -137,7 +136,6 @@ contract TwapOracle is Ownable {
             uint256 _price1Cumulative,
             uint32 _blockTimestamp
         ) = UniswapV2OracleLibrary.currentCumulativePrices(address(pair));
-
         newOracle = Oracle(
             pair,
             token0,
